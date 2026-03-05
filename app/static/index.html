@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Titan AI</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, sans-serif; padding: 20px; }
+        h1 { color: #00ff88; text-align: center; letter-spacing: 4px; margin-bottom: 20px; }
+        .panel { background: #111; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        input { width: 100%; padding: 14px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 8px; margin-bottom: 10px; }
+        button { width: 100%; padding: 14px; background: #00ff88; color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
+        .quick-btn { background: #1a1a1a; color: #00ff88; border: 1px solid #00ff88; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .output { background: #000; color: #00ff88; padding: 20px; border-radius: 8px; min-height: 300px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; white-space: pre-wrap; margin: 15px 0; }
+        .actions { display: flex; gap: 10px; }
+        .action-btn { background: #1a1a1a; color: #fff; border: 1px solid #333; }
+        .task { background: #1a1a1a; padding: 14px; margin: 10px 0; border-radius: 8px; display: flex; justify-content: space-between; border-left: 4px solid #00ff88; }
+        .task.completed { opacity: 0.5; border-left-color: #666; }
+        .task-actions { display: flex; gap: 8px; }
+        .task-btn { padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        .delete-btn { background: #ff4444; }
+        .auth-btns { display: flex; gap: 10px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { flex: 1; padding: 16px; background: #1a1a1a; border: none; color: #666; font-weight: bold; cursor: pointer; border-radius: 8px; }
+        .tab.active { background: #00ff88; color: #000; }
+        .user-bar { text-align: center; margin-bottom: 15px; color: #666; }
+        .user-bar span { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>TITAN AI</h1>
+    
+    <div id="login-panel" class="panel">
+        <h2 style="text-align:center; margin-bottom:20px;">Sign In</h2>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">LOGIN</button>
+        <p id="login-error" style="color:#ff4444; text-align:center; margin-top:10px; display:none;">Invalid credentials</p>
+    </div>
+    
+    <div id="main-panel" style="display:none;">
+        <div class="user-bar">Signed in as <span id="user-email"></span> <button class="task-btn" onclick="logout()" style="width:auto; padding:4px 10px;">LOGOUT</button></div>
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('ai')">ASK TITAN</button>
+            <button class="tab" onclick="showTab('tasks')">TASKS</button>
+        </div>
+        
+        <div id="ai-panel" class="panel">
+            <div class="quick-prompts">
+                <button class="quick-btn" onclick="setPrompt('Write a Python function for fibonacci')">Fibonacci</button>
+                <button class="quick-btn" onclick="setPrompt('Create a JavaScript fetch API call')">Fetch API</button>
+                <button class="quick-btn" onclick="setPrompt('Write a SQL query for duplicates')">SQL Query</button>
+            </div>
+            <input type="text" id="prompt" placeholder="Ask Titan to write code...">
+            <button onclick="askTitan()">EXECUTE</button>
+            <div class="output" id="output">// Titan is ready...</div>
+            <div class="actions">
+                <button class="action-btn" onclick="copyCode()">COPY</button>
+                <button class="action-btn" onclick="clearOutput()">CLEAR</button>
+            </div>
+        </div>
+        
+        <div id="tasks-panel" class="panel" style="display:none;">
+            <input type="text" id="taskTitle" placeholder="New task...">
+            <button onclick="addTask()">ADD</button>
+            <div id="tasks"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API = window.location.origin;
+        let token = localStorage.getItem('token');
+        let userEmail = localStorage.getItem('userEmail');
+        let lastCode = '';
+        
+        // Check if logged in
+        if (token && userEmail) {
+            showMain();
+        }
+        
+        function showMain() {
+            document.getElementById('login-panel').style.display = 'none';
+            document.getElementById('main-panel').style.display = 'block';
+            document.getElementById('user-email').textContent = userEmail;
+            loadTasks();
+        }
+        
+        function showLogin() {
+            document.getElementById('login-panel').style.display = 'block';
+            document.getElementById('main-panel').style.display = 'none';
+        }
+        
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const form = new FormData();
+            form.append('username', email);
+            form.append('password', password);
+            
+            try {
+                const res = await fetch(API + '/token', {method: 'POST', body: form});
+                if (!res.ok) {
+                    document.getElementById('login-error').style.display = 'block';
+                    return;
+                }
+                const data = await res.json();
+                token = data.access_token;
+                userEmail = email;
+                localStorage.setItem('token', token);
+                localStorage.setItem('userEmail', email);
+                document.getElementById('login-error').style.display = 'none';
+                showMain();
+            } catch (e) {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userEmail');
+            token = null;
+            userEmail = null;
+            showLogin();
+        }
+        
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('ai-panel').style.display = tab === 'ai' ? 'block' : 'none';
+            document.getElementById('tasks-panel').style.display = tab === 'tasks' ? 'block' : 'none';
+        }
+        
+        function setPrompt(p) { document.getElementById('prompt').value = p; }
+        
+        async function askTitan() {
+            const prompt = document.getElementById('prompt').value;
+            if (!prompt) return;
+            const output = document.getElementById('output');
+            output.textContent = '// Titan is thinking...\n';
+            lastCode = '';
+            try {
+                const res = await fetch(API + '/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({prompt: prompt})
+                });
+                
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data && data !== '[DONE]') {
+                                try {
+                                    const json = JSON.parse(data);
+                                    const content = json.choices?.[0]?.delta?.content || '';
+                                    if (content) {
+                                        lastCode += content;
+                                        output.textContent = lastCode;
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+                }
+                output.textContent += '\n\n// Done!';
+            } catch (e) { output.textContent += '\n\n// Error: ' + e.message; }
+        }
+        
+        function copyCode() { navigator.clipboard.writeText(lastCode); }
+        function clearOutput() { document.getElementById('output').textContent = '// Titan is ready...'; lastCode = ''; }
+        
+        // Tasks
+        async function addTask() {
+            await fetch(API + '/tasks/?title=' + encodeURIComponent(document.getElementById('taskTitle').value), {
+                method: 'POST',
+                headers: {Authorization: 'Bearer ' + token}
+            });
+            document.getElementById('taskTitle').value = '';
+            loadTasks();
+        }
+        
+        async function loadTasks() {
+            const res = await fetch(API + '/tasks/', {headers: {Authorization: 'Bearer ' + token}});
+            const tasks = await res.json();
+            document.getElementById('tasks').innerHTML = tasks.map(t => 
+                '<div class="task ' + (t.is_completed ? 'completed' : '') + '"><span>' + t.title + '</span><div class="task-actions"><button class="task-btn" onclick="toggle(' + t.id + ',' + !t.is_completed + ')">' + (t.is_completed ? 'UNCHECK' : 'CHECK') + '</button><button class="task-btn delete-btn" onclick="del(' + t.id + ')">DELETE</button></div></div>'
+            ).join('');
+        }
+        
+        async function toggle(id, v) {
+            await fetch(API + '/tasks/' + id + '?is_completed=' + v, {
+                method: 'PATCH',
+                headers: {Authorization: 'Bearer ' + token}
+            });
+            loadTasks();
+        }
+        
+        async function del(id) {
+            await fetch(API + '/tasks/' + id, {method: 'DELETE', headers: {Authorization: 'Bearer ' + token}});
+            loadTasks();
+        }
+    </script>
+</body>
+</html>
