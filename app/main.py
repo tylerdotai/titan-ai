@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, create_engine
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from pydantic import BaseModel
@@ -35,6 +36,16 @@ class Task(Base):
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -71,7 +82,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
 
 @app.get("/")
 def root():
-    return FileResponse("app/static/index.html")
+    return FileResponse("app/static/index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -84,17 +95,22 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
 
     async def event_stream():
         try:
-            # Use non-streaming request to Titan
-            resp = requests.post(
-                "http://192.168.0.247:8402/v1/chat/completions",
-                json={
-                    "model": "qwen3.5-35b",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 2000
-                },
-                timeout=120
-            )
-            result = resp.json()
+            # Use httpx for async HTTP calls
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "http://192.168.0.247:8402/v1/chat/completions",
+                    json={
+                        "model": "qwen3.5-35b",
+                        "messages": [
+                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_tokens": 2000
+                    },
+                    timeout=120.0
+                )
+                result = resp.json()
             
             # Extract content from response
             content = ""
@@ -102,17 +118,38 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
                 msg = result["choices"][0].get("message", {})
                 content = msg.get("content", "") or msg.get("reasoning_content", "")
             
-            # Stream the content character by character for effect
-            for char in content:
-                yield f"data: {char}\n\n"
-                await asyncio.sleep(0.02)  # Small delay for streaming effect
+            # Stream in chunks (words/lines) instead of character by character
+            # Split by whitespace but preserve structure
+            import re
+            # Split into chunks of ~50 chars to preserve formatting but reduce DOM updates
+            chunks = re.findall(r'.{1,50}', content)
             
-            yield "data: [DONE]\n\n"
+            for chunk in chunks:
+                yield f"data: {{\"data\": {json.dumps(chunk)}}}\n\n"
+                await asyncio.sleep(0.05)  # Small delay between chunks
             
+            yield "data: {\"data\": \"[DONE]\"}\n\n"
         except Exception as e:
-            yield f"data: Error: {str(e)}\n\n"
-
+            yield f"data: {{\"data\": \"Error: {str(e)}\"}}\n\n"
+    
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+class TTSRequest(BaseModel):
+    text: str
+    speaker: str = "brad"
+
+@app.post("/tts")
+async def text_to_speech(request: TTSRequest, current_user: User = Depends(get_current_user)):
+    """Convert text to speech using XTTS on Titan"""
+    try:
+        resp = requests.post(
+            "http://192.168.0.247:8189/tts",
+            json={"text": request.text, "speaker": request.speaker},
+            timeout=30
+        )
+        return Response(content=resp.content, media_type="audio/wav")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
 
 @app.post("/register")
 def register(form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)):

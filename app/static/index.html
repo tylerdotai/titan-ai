@@ -58,6 +58,7 @@
             <div class="actions">
                 <button class="action-btn" onclick="copyCode()">COPY</button>
                 <button class="action-btn" onclick="clearOutput()">CLEAR</button>
+                <button class="action-btn speak-btn" onclick="speakOutput()">🔊 SPEAK</button>
             </div>
         </div>
         
@@ -181,6 +182,26 @@
         
         function copyCode() { navigator.clipboard.writeText(lastCode); }
         function clearOutput() { document.getElementById('output').textContent = '// Titan is ready...'; lastCode = ''; }
+        
+        async function speakOutput() {
+            if (!lastCode) return;
+            const btn = document.querySelector('.speak-btn');
+            btn.textContent = '🔊 Speaking...';
+            try {
+                const resp = await fetch(API + '/tts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+                    body: JSON.stringify({text: lastCode.substring(0, 500), speaker: 'brad'})
+                });
+                const blob = await resp.blob();
+                const audio = new Audio(URL.createObjectURL(blob));
+                audio.play();
+                audio.onended = () => btn.textContent = '🔊 SPEAK';
+            } catch (e) {
+                btn.textContent = '🔊 SPEAK';
+                output.textContent += '\n\n// TTS Error: ' + e.message;
+            }
+        }
         
         // Tasks
         async function addTask() {
