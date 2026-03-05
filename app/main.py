@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, create_engine
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from pydantic import BaseModel
+import asyncio
 import hashlib
 import base64
 import json
@@ -80,26 +81,37 @@ class ChatRequest(BaseModel):
 async def chat_stream(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """Ask Titan with streaming - requires auth"""
     prompt = request.prompt
-    
-    def event_stream():
+
+    async def event_stream():
         try:
+            # Use non-streaming request to Titan
             resp = requests.post(
                 "http://192.168.0.247:8402/v1/chat/completions",
-                json={"model": "qwen3.5-35b", "messages": [{"role": "user", "content": prompt}]},
-                stream=True,
+                json={
+                    "model": "qwen3.5-35b",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 2000
+                },
                 timeout=120
             )
+            result = resp.json()
             
-            for chunk in resp.iter_lines():
-                if chunk:
-                    line = chunk.decode('utf-8')
-                    if line.startswith('data: '):
-                        data = line[6:]
-                        if data and data != '[DONE]':
-                            yield f"data: {data}\n\n"
+            # Extract content from response
+            content = ""
+            if result.get("choices"):
+                msg = result["choices"][0].get("message", {})
+                content = msg.get("content", "") or msg.get("reasoning_content", "")
+            
+            # Stream the content character by character for effect
+            for char in content:
+                yield f"data: {char}\n\n"
+                await asyncio.sleep(0.02)  # Small delay for streaming effect
+            
+            yield "data: [DONE]\n\n"
+            
         except Exception as e:
-            yield f"data: {str(e)}\n\n"
-    
+            yield f"data: Error: {str(e)}\n\n"
+
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @app.post("/register")
