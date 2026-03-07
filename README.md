@@ -1,58 +1,25 @@
-# Titan AI
+# Titan AI 🧠
 
-Local AI code generation platform - powered by qwen3.5 running on your own hardware.
+Local AI code generation powered by your own GPU.
+
+![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Ollama](https://img.shields.io/badge/-Ollama-000000?style=flat-square&logo=ollama)
+
+> Run LLMs locally. Keep your code private.
 
 ## Features
 
-- **Ask Titan** - Chat with local AI to generate code in real-time
-- **Task Manager** - Full CRUD task management with authentication
-- **Streaming Responses** - Watch code appear as it's generated
-- **Privacy First** - All data stays on your network
+- Local inference with Ollama
+- FastAPI backend
+- Code generation endpoints
+- GPU-accelerated (CUDA/ROCm)
 
-## Tech Stack
+## Stack
 
-- **Backend**: FastAPI (Python)
-- **Frontend**: Vanilla JS + Svelte
-- **Database**: SQLite
-- **AI**: qwen3.5-35b (local)
+Python • FastAPI • Ollama • llama.cpp
 
-## Quick Start
+## Connect
 
-```bash
-# Install dependencies
-pip install fastapi uvicorn sqlalchemy python-multipart
-
-# Run the server
-uvicorn app.main:app --host 0.0.0.0 --port 8766
-```
-
-## Authentication
-
-The app requires login before access. Create users via the API:
-
-```python
-import hashlib
-# Create user manually or via registration endpoint
-```
-
-Default endpoints:
-- POST /register - Create new account
-- POST /token - Login and get JWT token
-
-## Access
-
-- Local: http://localhost:8766
-- Network: http://YOUR_IP:8766
-- Remote: Use Cloudflare Tunnel
-
-## Architecture
-
-```
-User → FastAPI → SQLite (tasks)
-         ↓
-    qwen3.5-35b (Titan)
-```
-
-## License
-
-MIT License - See LICENSE file
+- **GitHub**: @tylerdotai
+- **Twitter**: @tylerdotai
